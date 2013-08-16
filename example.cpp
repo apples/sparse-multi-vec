@@ -28,6 +28,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <typeinfo>
 
 #include "sparsemultivec.inl"
 
@@ -116,6 +117,8 @@ int main()
     
     for (auto&& i : test)
     {
+        if (std::get<0>(i)) *std::get<0>(i) *= 2;
+        
         cout << int(id) << "\t";
         
         if (std::get<0>(i)) cout << *std::get<0>(i) << "\t";

@@ -1,6 +1,6 @@
 /*******************************************************************************
  * SparseMultiVec - A weird container.
- * Version: 0.0.1
+ * Version: 0.0.2
  * https://github.com/dbralir/sparse-multi-vec
  *
  * Copyright (c) 2013 Jeramy Harrison <dbralir@gmail.com>
@@ -14,7 +14,7 @@
  * freely, subject to the following restrictions:
  *
  *  1. The origin of this software must not be misrepresented; you must not
- *     claim that you wrote the original software. If you use this software
+ *     claim that you wrote the orig-inal software. If you use this software
  *     in a product, an acknowledgment in the product documentation would be
  *     appreciated but is not required.
  *
@@ -28,16 +28,14 @@
 #ifndef SPARSE_MULTI_VEC_INL
 #define SPARSE_MULTI_VEC_INL
 
+#include <cstddef>
 #include <tuple>
 #include <type_traits>
 #include <vector>
 
-namespace detail_SparseMultiVec
+namespace detailMetaContainers
 {
-    template <typename T>
-    using SparseContainerDefault = std::vector<T>;
-
-    template <typename T, template <typename U> class Container = SparseContainerDefault>
+    template <template <typename U> class Container, typename T>
     class SparseContainer
     {
         class Item
@@ -51,33 +49,31 @@ namespace detail_SparseMultiVec
             template <typename A>
             Item(A&& in)
                 : toNext{0}
-                , value{in}
+                , value{std::forward<A>(in)}
             {}
             
             int toNext;
             T value;
         };
         
-        using Data = Container<Item>;
+        using Data     = Container<Item>;
         using DataIter = typename Data::iterator;
         
     public:
         class Iterator
         {
         public:
-            Iterator()
-                : pos{0}
-                , iter{}
-            {}
+            Iterator() = default;
             
-            Iterator(int p, DataIter i)
+            template <typename A>
+            Iterator(int p, A&& i)
                 : pos{p}
-                , iter{i}
+                , iter{std::forward<A>(i)}
             {}
             
             T* operator*()
             {
-                return (pos == 0)? &iter->value : nullptr;
+                return (pos == 0)? &(iter->value) : nullptr;
             }
             
             Iterator& operator++()
@@ -92,16 +88,22 @@ namespace detail_SparseMultiVec
             
             bool operator==(const Iterator& in) const
             {
-                return (pos == in.pos && iter == in.iter);
+                return (
+                       std::tie(   pos,    iter)
+                    == std::tie(in.pos, in.iter)
+                );
             }
             
             bool operator!=(const Iterator& in) const
             {
-                return (pos != in.pos || iter != in.iter);
+                return (
+                       std::tie(   pos,    iter)
+                    != std::tie(in.pos, in.iter)
+                );
             }
             
         private:
-            int pos;
+            int      pos;
             DataIter iter;
         };
         
@@ -157,12 +159,13 @@ namespace detail_SparseMultiVec
         using type = decltype(T{}.begin());
     };
 
-    namespace detail_MultiContainer
+    namespace detailMultiContainer
     {
         template <typename T>
         struct TupleSize
         {
-            static constexpr auto value = std::tuple_size<typename std::decay<T>::type>::value;
+            using RawType = typename std::decay<T>::type;
+            static constexpr auto value = std::tuple_size<RawType>::value;
         };
         
         template <int N>
@@ -274,14 +277,11 @@ namespace detail_SparseMultiVec
         }
     }
 
-    template <typename... Types>
+    template <template <typename> class Container, typename... Types>
     class MultiContainer
     {
         static_assert(sizeof...(Types) > 0, "Must have at least one type!");
         
-        template <typename T>
-        using Container = SparseContainer<T>;
-
         using Tuple = std::tuple<Container<Types>...>;
         
         template <typename A>
@@ -292,7 +292,7 @@ namespace detail_SparseMultiVec
         
         using TupleIter = std::tuple<Iter<Types>...>;
         
-        using TuplePtr = std::tuple<Deref<Types>...>;
+        using TupleRef = std::tuple<Deref<Types>...>;
         
     public:
         class Iterator
@@ -303,16 +303,16 @@ namespace detail_SparseMultiVec
                 : iter{}
             {}
             
-            TuplePtr operator*()
+            TupleRef operator*()
             {
-                TuplePtr rval;
-                detail_MultiContainer::indirection(rval, iter);
+                TupleRef rval;
+                detailMultiContainer::indirection(rval, iter);
                 return rval;
             }
             
             Iterator& operator++()
             {
-                detail_MultiContainer::increment(iter);
+                detailMultiContainer::increment(iter);
                 return *this;
             }
             
@@ -337,14 +337,14 @@ namespace detail_SparseMultiVec
         Iterator begin()
         {
             Iterator rval;
-            detail_MultiContainer::makeBegin(rval.iter, data);
+            detailMultiContainer::makeBegin(rval.iter, data);
             return rval;
         }
         
         Iterator end()
         {
             Iterator rval;
-            detail_MultiContainer::makeEnd(rval.iter, data);
+            detailMultiContainer::makeEnd(rval.iter, data);
             return rval;
         }
         
@@ -369,10 +369,25 @@ namespace detail_SparseMultiVec
 
         Tuple data;
     };
+    
+    struct GoodThings
+    {
+        template <typename T>
+        using Decay = typename std::decay<T>::type;
+        
+        template <typename T>
+        using Vec = std::vector<T>;
+        
+        template <typename T>
+        using SparseVec = SparseContainer<Vec, T>;
+        
+        template <typename... P>
+        using SparseMultiVec = MultiContainer<SparseVec, Decay<P>...>;
+    };
 
-} //namespace detail_SparseMultiVec
+} //namespace detailMetaContainers
 
-template <typename... Types>
-using SparseMultiVec = detail_SparseMultiVec::MultiContainer<Types...>;
+template <typename... P>
+using SparseMultiVec = detailMetaContainers::GoodThings::SparseMultiVec<P...>;
 
 #endif //SPARSE_MULTI_VEC_INL
