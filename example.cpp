@@ -63,6 +63,16 @@ string randomName()
     return rval;
 }
 
+template <typename T>
+void wreckIt(T& in)
+{
+    auto it = begin(in);
+    
+    for (int i=0; i<10; ++i) ++it;
+    
+    in.erase(it);
+}
+
 int main()
 {
     SparseMultiVec<int, float, string> test;
@@ -110,6 +120,8 @@ int main()
             break;}
         }
     }
+    
+    wreckIt(test);
     
     Counter<int> id;
     

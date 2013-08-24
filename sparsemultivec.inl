@@ -61,6 +61,7 @@ class SparseContainer
 public:
     class iterator
     {
+        friend SparseContainer;
     public:
         using value_type = T;
         using pointer = value_type*;
@@ -120,16 +121,6 @@ public:
         , data{}
     {}
     
-    iterator begin()
-    {
-        return {-toFirst, data.begin()};
-    }
-    
-    iterator end()
-    {
-        return {0, data.end()};
-    }
-    
     template <typename A>
     void push_back(A&& in)
     {
@@ -144,40 +135,78 @@ public:
         ++sz;
     }
     
+    iterator erase(iterator it)
+    {
+        if (it == begin(*this)) return erase_front();
+        
+        if (it.pos == 0)
+        {
+            if (it.iter->toNext == 0)
+            {
+                return {0, data.erase(it.iter)};
+            }
+            else
+            {
+                auto prev = it.iter;
+                --prev;
+                auto newPos = prev->toNext;
+                prev->toNext += it.iter->toNext;
+                data.erase(it.iter);
+                return {newPos, prev};
+            }
+        }
+        else if (it.pos < 0)
+        {
+            --toFirst;
+            ++it.pos;
+            return it;
+        }
+        else
+        {
+            --it.pos;
+            --it.iter->toNext;
+            return ++it;
+        }
+    }
+    
+    iterator erase_front()
+    {
+        auto it = begin(data);
+        toFirst += it->toNext;
+        data.erase(it);
+        return begin(*this);
+    }
+    
     int size() const
     {
         return sz;
     }
     
+    friend iterator begin(SparseContainer& in)
+    {
+        return {-in.toFirst, begin(in.data)};
+    }
+
+    friend iterator end(SparseContainer& in)
+    {
+        return {0, end(in.data)};
+    }
+
+    friend iterator begin(SparseContainer&& in)
+    {
+        return {-in.toFirst, begin(in.data)};
+    }
+
+    friend iterator end(SparseContainer&& in)
+    {
+        return {0, end(in.data)};
+    }
+
 private:
     int toFirst;
     Data data;
     int sz;
 };
-
-template <template <typename> class C, typename T>
-typename SparseContainer<C,T>::iterator begin(SparseContainer<C,T>& in)
-{
-    return in.begin();
-}
-
-template <template <typename> class C, typename T>
-typename SparseContainer<C,T>::iterator end(SparseContainer<C,T>& in)
-{
-    return in.end();
-}
-
-template <template <typename> class C, typename T>
-typename SparseContainer<C,T>::iterator begin(SparseContainer<C,T>&& in)
-{
-    return in.begin();
-}
-
-template <template <typename> class C, typename T>
-typename SparseContainer<C,T>::iterator end(SparseContainer<C,T>&& in)
-{
-    return in.end();
-}
 
 namespace detailMultiContainer
 {
@@ -188,7 +217,7 @@ namespace detailMultiContainer
     };
 
     template <typename T>
-    struct IteratorType
+    struct iteratorType
     {
         using type = decltype(begin(std::declval<T>()));
     };
@@ -307,8 +336,44 @@ namespace detailMultiContainer
     {
         IncrementRecurse<TupleSize<T>::value-1>::increment(t);
     }
+    
+    template <int N>
+    struct EraseRecurse
+    {
+        template <typename C, typename T>
+        static void erase(C& c, const T& t, T& u)
+        {
+            std::get<N>(u) = std::get<N>(c).erase(std::get<N>(t));
+            EraseRecurse<N-1>::erase(c, t, u);
+        }
+    };
+    
+    template <>
+    struct EraseRecurse<0>
+    {
+        template <typename C, typename T>
+        static void erase(C& c, const T& t, T& u)
+        {
+            std::get<0>(u) = std::get<0>(c).erase(std::get<0>(t));
+        }
+    };
+    
+    template <typename C, typename T>
+    void erase(C& c, const T& t, T& u)
+    {
+        EraseRecurse<TupleSize<T>::value-1>::erase(c, t, u);
+    }
 
 } // namespace detailMultiContainer
+
+template <template <typename> class Container, typename... Types>
+class MultiContainer;
+
+template <template <typename> class Container, typename... Types>
+typename MultiContainer<Container, Types...>::iterator begin(MultiContainer<Container, Types...>& in);
+
+template <template <typename> class Container, typename... Types>
+typename MultiContainer<Container, Types...>::iterator end(MultiContainer<Container, Types...>& in);
 
 template <template <typename> class Container, typename... Types>
 class MultiContainer
@@ -318,7 +383,7 @@ class MultiContainer
     using Tuple = std::tuple<Container<Types>...>;
     
     template <typename A>
-    using Iter = typename detailMultiContainer::IteratorType<Container<A>>::type;
+    using Iter = typename detailMultiContainer::iteratorType<Container<A>>::type;
     
     template <typename A>
     using Deref = typename detailMultiContainer::DereferenceType<Iter<A>>::type;
@@ -328,14 +393,14 @@ class MultiContainer
     using TupleRef = std::tuple<Deref<Types>...>;
     
 public:
-    class Iterator
+    class iterator
     {
         friend MultiContainer;
-    public:
-        Iterator()
-            : iter{}
-        {}
         
+        friend iterator begin<>(MultiContainer& in);
+        friend iterator end<>(MultiContainer& in);
+        
+    public:
         TupleRef operator*()
         {
             TupleRef rval;
@@ -343,18 +408,18 @@ public:
             return rval;
         }
         
-        Iterator& operator++()
+        iterator& operator++()
         {
             detailMultiContainer::increment(iter);
             return *this;
         }
         
-        bool operator==(const Iterator& in)
+        bool operator==(const iterator& in)
         {
             return (iter == in.iter);
         }
         
-        bool operator!=(const Iterator& in) const
+        bool operator!=(const iterator& in) const
         {
             return (iter != in.iter);
         }
@@ -367,20 +432,6 @@ public:
         : data{}
     {}
     
-    Iterator begin()
-    {
-        Iterator rval;
-        detailMultiContainer::makeBegin(rval.iter, data);
-        return rval;
-    }
-    
-    Iterator end()
-    {
-        Iterator rval;
-        detailMultiContainer::makeEnd(rval.iter, data);
-        return rval;
-    }
-    
     template <typename... A>
     void push_back(A&&... in)
     {
@@ -388,6 +439,16 @@ public:
         push_backer(in...);
     }
     
+    iterator erase(iterator it)
+    {
+        iterator rval;
+        detailMultiContainer::erase(data, it.iter, rval.iter);
+        return rval;
+    }
+    
+    friend iterator begin<>(MultiContainer& in);
+    friend iterator end<>(MultiContainer& in);
+
 private:
     template <int N = 0, typename A, typename... B>
     void push_backer(A&& a, B&&... o)
@@ -402,6 +463,22 @@ private:
 
     Tuple data;
 };
+
+template <template <typename> class Container, typename... Types>
+typename MultiContainer<Container, Types...>::iterator begin(MultiContainer<Container, Types...>& in)
+{
+    typename MultiContainer<Container, Types...>::iterator rval;
+    detailMultiContainer::makeBegin(rval.iter, in.data);
+    return rval;
+}
+
+template <template <typename> class Container, typename... Types>
+typename MultiContainer<Container, Types...>::iterator end(MultiContainer<Container, Types...>& in)
+{
+    typename MultiContainer<Container, Types...>::iterator rval;
+    detailMultiContainer::makeEnd(rval.iter, in.data);
+    return rval;
+}
 
 struct detailSparseMultiVec
 {
