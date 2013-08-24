@@ -30,7 +30,7 @@
 #include <string>
 #include <typeinfo>
 
-#include "sparsemultivec.inl"
+#include "sparsemultivec.hpp"
 
 using namespace std;
 
