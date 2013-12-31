@@ -25,8 +25,8 @@
  *
  ******************************************************************************/
 
-#ifndef SPARSE_MULTI_VEC_INL
-#define SPARSE_MULTI_VEC_INL
+#ifndef SPARSE_MULTI_VEC_HPP
+#define SPARSE_MULTI_VEC_HPP
 
 #include <cstddef>
 #include <tuple>
@@ -498,4 +498,4 @@ struct detailSparseMultiVec
 template <typename... P>
 using SparseMultiVec = detailSparseMultiVec::SparseMultiVec<P...>;
 
-#endif //SPARSE_MULTI_VEC_INL
+#endif //SPARSE_MULTI_VEC_HPP
